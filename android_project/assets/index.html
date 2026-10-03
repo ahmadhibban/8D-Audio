@@ -1,0 +1,1528 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+  <title>8D Audio</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    :root {
+      --bg: #090a10;
+      --card-bg: rgba(255, 255, 255, 0.03);
+      --card-active: #151a28;
+      --accent: #00f2fe;
+      --accent-grad: linear-gradient(135deg, #00f2fe 0%, #4facfe 100%);
+      --accent-glow: rgba(0, 242, 254, 0.45);
+      --text-main: #ffffff;
+      --text-sub: #94a3b8;
+      --text-muted: #475569;
+      --border-subtle: rgba(255, 255, 255, 0.06);
+      --border-accent: rgba(0, 242, 254, 0.5);
+    }
+    body {
+      background: var(--bg);
+      color: var(--text-main);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+      overflow-x: hidden;
+      padding-top: 6px;
+      padding-bottom: 92px; /* space for docked mini-player */
+    }
+
+    /* SVG ICONS BASE */
+    .svg-icon {
+      display: inline-block;
+      width: 1em;
+      height: 1em;
+      stroke-width: 0;
+      stroke: currentColor;
+      fill: currentColor;
+      vertical-align: middle;
+      pointer-events: none;
+    }
+    .svg-stroke {
+      fill: none !important;
+      stroke: currentColor !important;
+    }
+
+    /* SILENT PULL TO REFRESH */
+    #pullBox {
+      position: fixed;
+      top: -55px;
+      left: 0;
+      right: 0;
+      height: 55px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 999;
+      pointer-events: none;
+      transition: transform 0.15s ease-out;
+    }
+    #pullSpinner {
+      width: 24px;
+      height: 24px;
+      border: 2.5px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      background: #141724;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, 0.6);
+    }
+    #pullBox.loading #pullSpinner {
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin {
+      100% { transform: rotate(360deg); }
+    }
+
+    /* SPOTIFY / YOUTUBE MUSIC STYLE SONG LIST */
+    .song-list {
+      padding: 4px 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .song-row {
+      display: flex;
+      align-items: center;
+      padding: 8px 10px;
+      border-radius: 12px;
+      background: var(--card-bg);
+      border: 1px solid transparent;
+      gap: 12px;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .song-row:active {
+      background: #181c2c;
+    }
+    .song-row.active {
+      background: var(--card-active);
+      border-color: var(--border-accent);
+    }
+    .song-row.active .row-title {
+      color: var(--accent);
+    }
+
+    .row-rank {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text-muted);
+      width: 20px;
+      text-align: center;
+      flex-shrink: 0;
+    }
+    .row-rank.top-1 { color: #ffd700; }
+    .row-rank.top-2 { color: #cbd5e1; }
+    .row-rank.top-3 { color: #cd7f32; }
+
+    .row-thumb-box {
+      position: relative;
+      width: 52px;
+      height: 52px;
+      border-radius: 8px;
+      overflow: hidden;
+      flex-shrink: 0;
+      background: #000;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    .song-row.active .row-thumb-box {
+      box-shadow: 0 0 10px var(--accent-glow);
+    }
+    .row-thumb {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .row-dim-badge {
+      position: absolute;
+      top: 2px;
+      right: 2px;
+      font-size: 8px;
+      font-weight: 900;
+      padding: 1px 4px;
+      border-radius: 3px;
+      color: #000;
+      background: var(--accent);
+    }
+
+    .row-info {
+      flex: 1;
+      min-width: 0;
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .row-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-main);
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-meta {
+      font-size: 12px;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-artist {
+      max-width: 140px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .row-dot {
+      color: var(--text-muted);
+      font-size: 8px;
+    }
+    .row-views {
+      color: #38bdf8;
+      font-weight: 600;
+    }
+
+    /* INFINITE SCROLL SENTINEL */
+    .sentinel-box {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+      color: var(--text-muted);
+      font-size: 12.5px;
+      gap: 8px;
+    }
+    .bottom-spinner {
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.15);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    /* ==================================================
+       SPOTIFY-TIER DOCKED MINI-PLAYER (BOTTOM)
+       ================================================== */
+    .mini-player {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 64px;
+      background: rgba(16, 18, 27, 0.95);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      border-top: 1px solid var(--border-subtle);
+      box-shadow: 0 -8px 30px rgba(0, 0, 0, 0.7);
+      display: flex;
+      align-items: center;
+      padding: 0 14px;
+      z-index: 1000;
+      transform: translateY(110%);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .mini-player.show {
+      transform: translateY(0);
+    }
+
+    .mini-progress-track {
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2.5px;
+      background: rgba(255, 255, 255, 0.08);
+    }
+    .mini-progress-fill {
+      height: 100%;
+      width: 0%;
+      background: var(--accent-grad);
+      box-shadow: 0 0 6px var(--accent);
+      transition: width 0.2s linear;
+    }
+
+    .mini-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex: 1;
+      min-width: 0;
+      cursor: pointer;
+    }
+    .mini-thumb {
+      width: 44px;
+      height: 44px;
+      border-radius: 8px;
+      object-fit: cover;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+    }
+    .mini-text {
+      flex: 1;
+      min-width: 0;
+    }
+    .mini-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .mini-artist {
+      font-size: 11.5px;
+      color: var(--accent);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      margin-top: 2px;
+    }
+
+    .mini-controls {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex-shrink: 0;
+    }
+    .mini-btn {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      width: 38px;
+      height: 38px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: transform 0.15s, color 0.15s;
+    }
+    .mini-btn:active {
+      transform: scale(0.88);
+      color: var(--accent);
+    }
+    .mini-play-btn {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      background: var(--accent-grad);
+      color: #000;
+      box-shadow: 0 2px 10px var(--accent-glow);
+    }
+    .mini-play-btn:active {
+      transform: scale(0.9);
+    }
+
+    /* ==================================================
+       SPOTIFY / YOUTUBE MUSIC FULL-SCREEN MASTER PLAYER
+       ================================================== */
+    .full-player {
+      position: fixed;
+      inset: 0;
+      background: #090a10;
+      z-index: 2000;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 16px 24px 28px 24px;
+      transform: translateY(100%);
+      transition: transform 0.36s cubic-bezier(0.16, 1, 0.3, 1);
+      overflow-y: auto;
+    }
+    .full-player.open {
+      transform: translateY(0);
+    }
+
+    /* TOP BAR */
+    .full-top-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 48px;
+    }
+    .full-icon-btn {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      width: 44px;
+      height: 44px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: transform 0.15s, color 0.15s;
+    }
+    .full-icon-btn:active {
+      transform: scale(0.9);
+      color: #fff;
+    }
+    .full-header-title {
+      font-size: 11px;
+      font-weight: 800;
+      letter-spacing: 1.6px;
+      color: var(--text-sub);
+      text-transform: uppercase;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      box-shadow: 0 0 8px var(--accent);
+    }
+
+    /* ARTWORK CONTAINER */
+    .full-art-box {
+      position: relative;
+      margin: auto;
+      width: min(80vw, 290px);
+      height: min(80vw, 290px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .full-glow {
+      position: absolute;
+      inset: -15px;
+      border-radius: 28px;
+      background-size: cover;
+      background-position: center;
+      filter: blur(44px);
+      opacity: 0.35;
+      z-index: 1;
+      transition: opacity 0.5s;
+    }
+    .full-art-img {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      border-radius: 20px;
+      object-fit: cover;
+      box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+      z-index: 2;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* DOUBLE TAP RIPPLE INDICATOR */
+    .seek-ripple {
+      position: absolute;
+      top: 0;
+      bottom: 0;
+      width: 40%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease-out;
+    }
+    .seek-ripple.left { left: 0; border-top-left-radius: 20px; border-bottom-left-radius: 20px; }
+    .seek-ripple.right { right: 0; border-top-right-radius: 20px; border-bottom-right-radius: 20px; }
+    .seek-ripple-pill {
+      background: rgba(0, 0, 0, 0.8);
+      border: 1px solid var(--accent);
+      color: #fff;
+      font-size: 13px;
+      font-weight: 800;
+      padding: 8px 14px;
+      border-radius: 20px;
+      backdrop-filter: blur(8px);
+    }
+
+    /* TRACK METADATA (Spotify Style) */
+    .full-track-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 16px;
+      margin-bottom: 8px;
+      gap: 14px;
+    }
+    .full-track-info {
+      flex: 1;
+      min-width: 0;
+      text-align: left;
+    }
+    .full-title {
+      font-size: 20px;
+      font-weight: 700;
+      color: #fff;
+      line-height: 1.35;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      margin-bottom: 4px;
+    }
+    .full-meta {
+      font-size: 14px;
+      color: var(--text-sub);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .full-artist {
+      color: var(--accent);
+      font-weight: 600;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 180px;
+    }
+    .full-fav-btn {
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      width: 48px;
+      height: 48px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      flex-shrink: 0;
+      transition: all 0.2s;
+    }
+    .full-fav-btn.active {
+      color: #00f2fe;
+    }
+    .full-fav-btn:active {
+      transform: scale(0.85);
+    }
+
+    /* REAL SPOTIFY-STYLE FILLED PROGRESS SCRUBBER */
+    .full-scrubber-box {
+      margin: 14px 0 6px 0;
+    }
+    .full-slider {
+      width: 100%;
+      -webkit-appearance: none;
+      height: 4.5px;
+      border-radius: 2.5px;
+      background: linear-gradient(to right, #00f2fe 0%, #00f2fe 0%, #1e2334 0%, #1e2334 100%);
+      outline: none;
+      cursor: pointer;
+    }
+    .full-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      border-radius: 50%;
+      background: #ffffff;
+      box-shadow: 0 0 10px rgba(0, 242, 254, 0.9);
+      cursor: pointer;
+    }
+    .full-time-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-sub);
+      font-weight: 600;
+      margin-top: 8px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    /* ==================================================
+       PERFECTLY BALANCED 5-BUTTON MASTER CONTROLS ROW
+       (Bigger, prominent icons as requested)
+       ================================================== */
+    .full-controls-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 22px;
+      margin-bottom: 8px;
+      padding: 0 4px;
+    }
+    .full-ctrl-btn {
+      background: none;
+      border: none;
+      color: #cbd5e1;
+      width: 52px;
+      height: 52px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      transition: all 0.15s ease;
+    }
+    .full-ctrl-btn:active {
+      transform: scale(0.88);
+      color: var(--accent);
+    }
+    .full-ctrl-btn.active {
+      color: var(--accent);
+      filter: drop-shadow(0 0 10px var(--accent-glow));
+    }
+
+    /* MASTER CENTER PLAY/PAUSE (72px FAB with 32px solid icon) */
+    .full-play-btn {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: var(--accent-grad);
+      color: #000;
+      box-shadow: 0 4px 24px var(--accent-glow);
+    }
+    .full-play-btn:active {
+      transform: scale(0.92);
+    }
+
+    /* UP NEXT QUEUE SHEET */
+    .queue-sheet {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 10, 16, 0.96);
+      backdrop-filter: blur(24px);
+      z-index: 2500;
+      display: flex;
+      flex-direction: column;
+      padding: 16px 20px;
+      transform: translateY(100%);
+      transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .queue-sheet.open {
+      transform: translateY(0);
+    }
+    .queue-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 44px;
+      border-bottom: 1px solid var(--border-subtle);
+      padding-bottom: 8px;
+    }
+    .queue-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #fff;
+    }
+    .queue-list {
+      flex: 1;
+      overflow-y: auto;
+      margin-top: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .queue-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px;
+      border-radius: 10px;
+      background: rgba(255, 255, 255, 0.02);
+      cursor: pointer;
+    }
+    .queue-item.active {
+      background: #141b2c;
+      border: 1px solid var(--border-accent);
+    }
+    .queue-item-thumb {
+      width: 44px;
+      height: 34px;
+      border-radius: 6px;
+      object-fit: cover;
+    }
+    .queue-item-info {
+      flex: 1;
+      min-width: 0;
+    }
+    .queue-item-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .queue-item-artist {
+      font-size: 11px;
+      color: var(--text-sub);
+    }
+
+    /* HIDDEN AUDIO ENGINE CONTAINER */
+    #yt-hidden-wrap {
+      position: fixed;
+      bottom: 0;
+      right: 0;
+      width: 1px;
+      height: 1px;
+      opacity: 0.01;
+      pointer-events: none;
+      z-index: -100;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- SILENT PULL TO REFRESH -->
+  <div id="pullBox">
+    <div id="pullSpinner"></div>
+  </div>
+
+  <!-- SPOTIFY / YOUTUBE MUSIC STYLE SONG LIST -->
+  <main class="song-list" id="songList"></main>
+
+  <!-- SENTINEL FOR INFINITE SCROLL -->
+  <div class="sentinel-box" id="sentinel">
+    <div class="bottom-spinner"></div>
+    <span>Loading more 8D audio hits...</span>
+  </div>
+
+  <!-- ==============================================
+       SPOTIFY-TIER DOCKED MINI-PLAYER (BOTTOM)
+       ============================================== -->
+  <div class="mini-player" id="miniPlayer">
+    <div class="mini-progress-track">
+      <div class="mini-progress-fill" id="miniProgressFill"></div>
+    </div>
+    <div class="mini-left" onclick="openFullPlayer()">
+      <img class="mini-thumb" id="miniThumb" src="" alt="">
+      <div class="mini-text">
+        <div class="mini-title" id="miniTitle">Select a song</div>
+        <div class="mini-artist" id="miniArtist">8D Spatial Audio</div>
+      </div>
+    </div>
+    <!-- BALANCED 3-BUTTON CONTROLS (Previous, Play/Pause, Next) -->
+    <div class="mini-controls">
+      <!-- Previous (22px SVG) -->
+      <button class="mini-btn" onclick="playPrev()" title="Previous">
+        <svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22">
+          <rect x="4" y="5" width="2.5" height="14" rx="1.25"/>
+          <path d="M19 5.5v13a1 1 0 0 1-1.55.84l-9.5-6.5a1 1 0 0 1 0-1.68l9.5-6.5A1 1 0 0 1 19 5.5z"/>
+        </svg>
+      </button>
+
+      <!-- Play / Pause (40px FAB with 20px SVG) -->
+      <button class="mini-btn mini-play-btn" id="miniPlayBtn" onclick="togglePlay()" title="Play/Pause">
+        <svg id="miniPlayIcon" class="svg-icon" viewBox="0 0 24 24" width="20" height="20">
+          <path d="M8 5.14v13.72a1 1 0 0 0 1.55.84l11-6.86a1 1 0 0 0 0-1.68l-11-6.86A1 1 0 0 0 8 5.14z"/>
+        </svg>
+      </button>
+
+      <!-- Next (22px SVG) -->
+      <button class="mini-btn" onclick="playNext()" title="Next">
+        <svg class="svg-icon" viewBox="0 0 24 24" width="22" height="22">
+          <path d="M5 5.5v13a1 1 0 0 0 1.55.84l9.5-6.5a1 1 0 0 0 0-1.68l-9.5-6.5A1 1 0 0 0 5 5.5z"/>
+          <rect x="17.5" y="5" width="2.5" height="14" rx="1.25"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- ==============================================
+       SPOTIFY / YOUTUBE MUSIC FULL-SCREEN MASTER PLAYER
+       ============================================== -->
+  <div class="full-player" id="fullPlayer">
+    <!-- Top Bar -->
+    <div class="full-top-bar">
+      <!-- Chevron Down (28px SVG) -->
+      <button class="full-icon-btn" onclick="closeFullPlayer()" title="Minimize">
+        <svg class="svg-icon svg-stroke" viewBox="0 0 24 24" width="28" height="28" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+
+      <div class="full-header-title">
+        <div class="pulse-dot"></div>
+        <span id="fullHeaderDim">PLAYING 8D AUDIO</span>
+      </div>
+
+      <!-- Queue Sheet Button (26px SVG) -->
+      <button class="full-icon-btn" onclick="openQueueSheet()" title="Up Next">
+        <svg class="svg-icon svg-stroke" viewBox="0 0 24 24" width="26" height="26" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="8" y1="6" x2="21" y2="6"/>
+          <line x1="8" y1="12" x2="21" y2="12"/>
+          <line x1="8" y1="18" x2="21" y2="18"/>
+          <line x1="3" y1="6" x2="3.01" y2="6"/>
+          <line x1="3" y1="12" x2="3.01" y2="12"/>
+          <line x1="3" y1="18" x2="3.01" y2="18"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Center Album Art (Clean, Static, with Double-Tap 10s Skip) -->
+    <div class="full-art-box" id="artBoxContainer">
+      <div class="full-glow" id="fullGlow"></div>
+      <img class="full-art-img" id="fullThumb" src="" alt="">
+      
+      <!-- Double-Tap Left (Rewind 10s) Indicator -->
+      <div class="seek-ripple left" id="rippleLeft">
+        <div class="seek-ripple-pill">◀◀ 10s</div>
+      </div>
+      <!-- Double-Tap Right (Forward 10s) Indicator -->
+      <div class="seek-ripple right" id="rippleRight">
+        <div class="seek-ripple-pill">10s ▶▶</div>
+      </div>
+    </div>
+
+    <!-- Bottom Section: Info + Seekbar + Bigger 5-Button Controls -->
+    <div>
+      <!-- Spotify Style Track Info Row -->
+      <div class="full-track-row">
+        <div class="full-track-info">
+          <div class="full-title" id="fullTitle">Title</div>
+          <div class="full-meta">
+            <span class="full-artist" id="fullArtist">Artist</span>
+            <span style="color: var(--text-muted); font-size: 8px;">•</span>
+            <span id="fullViews">Views</span>
+          </div>
+        </div>
+        <!-- Favorite Heart (28px SVG) -->
+        <button class="full-fav-btn" id="fullFavBtn" onclick="toggleFavorite()" title="Favorite">
+          <svg id="favSvgIcon" class="svg-icon svg-stroke" viewBox="0 0 24 24" width="28" height="28" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Scrubber Seekbar (Filled Progress Bar Effect) -->
+      <div class="full-scrubber-box">
+        <input type="range" class="full-slider" id="fullSlider" min="0" max="100" value="0"
+               oninput="onSliderInput(this.value)" onchange="onSliderChange(this.value)">
+        <div class="full-time-row">
+          <span id="fullCurTime">00:00</span>
+          <span id="fullDurTime">00:00</span>
+        </div>
+      </div>
+
+      <!-- ==============================================
+           PROMINENT & BALANCED 5-BUTTON MASTER ROW
+           Shuffle (26px) | Prev (32px) | Play (72px FAB) | Next (32px) | Repeat (26px)
+           ============================================== -->
+      <div class="full-controls-row">
+        <!-- 1. Shuffle (26px SVG) -->
+        <button class="full-ctrl-btn" id="btnShuffle" onclick="toggleShuffle()" title="Shuffle">
+          <svg class="svg-icon svg-stroke" viewBox="0 0 24 24" width="26" height="26" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="16 3 21 3 21 8"/>
+            <line x1="4" y1="20" x2="21" y2="3"/>
+            <polyline points="21 16 21 21 16 21"/>
+            <line x1="15" y1="15" x2="21" y2="21"/>
+            <line x1="4" y1="4" x2="9" y2="9"/>
+          </svg>
+        </button>
+
+        <!-- 2. Previous (32px Solid SVG) -->
+        <button class="full-ctrl-btn" onclick="playPrev()" title="Previous">
+          <svg class="svg-icon" viewBox="0 0 24 24" width="32" height="32">
+            <rect x="4" y="5" width="2.5" height="14" rx="1.25"/>
+            <path d="M19 5.5v13a1 1 0 0 1-1.55.84l-9.5-6.5a1 1 0 0 1 0-1.68l9.5-6.5A1 1 0 0 1 19 5.5z"/>
+          </svg>
+        </button>
+
+        <!-- 3. Master Center Play / Pause (72px Circular FAB with 32px Solid SVG) -->
+        <button class="full-ctrl-btn full-play-btn" id="fullPlayBtn" onclick="togglePlay()" title="Play/Pause">
+          <svg id="fullPlayIcon" class="svg-icon" viewBox="0 0 24 24" width="32" height="32">
+            <path d="M8 5.14v13.72a1 1 0 0 0 1.55.84l11-6.86a1 1 0 0 0 0-1.68l-11-6.86A1 1 0 0 0 8 5.14z"/>
+          </svg>
+        </button>
+
+        <!-- 4. Next (32px Solid SVG) -->
+        <button class="full-ctrl-btn" onclick="playNext()" title="Next">
+          <svg class="svg-icon" viewBox="0 0 24 24" width="32" height="32">
+            <path d="M5 5.5v13a1 1 0 0 0 1.55.84l9.5-6.5a1 1 0 0 0 0-1.68l-9.5-6.5A1 1 0 0 0 5 5.5z"/>
+            <rect x="17.5" y="5" width="2.5" height="14" rx="1.25"/>
+          </svg>
+        </button>
+
+        <!-- 5. Repeat (26px SVG) -->
+        <button class="full-ctrl-btn" id="btnRepeat" onclick="toggleRepeat()" title="Repeat">
+          <svg id="repeatIconSvg" class="svg-icon svg-stroke" viewBox="0 0 24 24" width="26" height="26" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="17 1 21 5 17 9"/>
+            <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+            <polyline points="7 23 3 19 7 15"/>
+            <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- UP NEXT QUEUE SHEET (DRAWER) -->
+  <div class="queue-sheet" id="queueSheet">
+    <div class="queue-header">
+      <div class="queue-title">Playing Queue</div>
+      <button class="full-icon-btn" onclick="closeQueueSheet()">
+        <svg class="svg-icon svg-stroke" viewBox="0 0 24 24" width="22" height="22" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="18" y1="6" x2="6" y2="18"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="queue-list" id="queueList"></div>
+  </div>
+
+  <!-- YOUTUBE AUDIO ENGINE CONTAINER -->
+  <div id="yt-hidden-wrap">
+    <div id="yt-engine-player"></div>
+  </div>
+
+  <script src="https://www.youtube.com/iframe_api"></script>
+
+  <script>
+    const allSongs = [{"id": "o_TYVGp9n0s", "title": "Phao - 2 Phut Hon", "artist": "Shake Music", "views": "51M views", "viewsNum": 51083777, "dim": "9D"}, {"id": "_sdh5h_zkkk", "title": "Alan Walker - Faded", "artist": "8D TUNES", "views": "49M views", "viewsNum": 49086061, "dim": "8D"}, {"id": "IiCIjm_cH38", "title": "Justin bieber DJ snake ft.Let me love you", "artist": "lazy 9D", "views": "24M views", "viewsNum": 24385601, "dim": "9D"}, {"id": "otCL-UXvcvo", "title": "XXXTENTACION - Hope", "artist": "10D AUDIO", "views": "23M views", "viewsNum": 23114282, "dim": "8D"}, {"id": "x-qO34P15vg", "title": "Bom Diggy Diggy ||sound || AR 3D production", "artist": "AR 3D production ", "views": "19M views", "viewsNum": 19547618, "dim": "8D"}, {"id": "ebfboqfPYGk", "title": "Music Mix BestSongs", "artist": "8D TUNES", "views": "19M views", "viewsNum": 19417115, "dim": "8D"}, {"id": "YJKojo6xp9c", "title": "Edward Maya & Vika Jigulina - Stereo Love", "artist": "8D TUNES", "views": "14M views", "viewsNum": 14608718, "dim": "8D"}, {"id": "M5CROqwXPw4", "title": "Glass Animals - Heat Waves", "artist": "8D TUNES", "views": "13M views", "viewsNum": 13212620, "dim": "8D"}, {"id": "BjWbMCqbYag", "title": "Saiyaan Ji Yo Yo Honey Singh, Neha Kakkar|Nushrratt Bharuccha|Lil, Hommie|3D Surround", "artist": "8D Boom Baam", "views": "12M views", "viewsNum": 12493287, "dim": "8D"}, {"id": "JYwUS06-5Ho", "title": "Relaxing Music Sleep Calm, Chill Out, Study, Meditation,", "artist": "SleepTube - Hypnotic Relaxation", "views": "10M views", "viewsNum": 10832249, "dim": "8D"}, {"id": "gVbB7DCgfZs", "title": "Luis Fonsi - Despacito ft. Daddy Yankee", "artist": "8DxNation", "views": "10M views", "viewsNum": 10562605, "dim": "8D"}, {"id": "W2h8QfnvqSg", "title": "Music Mix BestSongs", "artist": "8D TUNES", "views": "10M views", "viewsNum": 10271100, "dim": "8D"}, {"id": "AKjsXiiIA4E", "title": "Shakira - Waka Waka", "artist": "8D SOUNDS", "views": "9.0M views", "viewsNum": 8961736, "dim": "8D"}, {"id": "7kgyZWanVb8", "title": "The Chainsmokers ft. Halsey - Closer", "artist": "Revo-luution", "views": "7.0M views", "viewsNum": 7039341, "dim": "8D"}, {"id": "no_NjYa9zTk", "title": "Mere Rashke QamarSong - Baadshaho", "artist": "8D Bollywood Gaana ", "views": "7.0M views", "viewsNum": 7020513, "dim": "8D"}, {"id": "BgMf2KCzEwE", "title": "20 Minutes of Brain Massage", "artist": "SRLA 8D MUSIC", "views": "7.0M views", "viewsNum": 6957773, "dim": "8D"}, {"id": "W8xRWW_eVek", "title": "dilber || Nora fatehi ||sound || AR 3d production", "artist": "AR 3D production ", "views": "6.8M views", "viewsNum": 6817265, "dim": "8D"}, {"id": "ARpO9AbyZQo", "title": "Ed Sheeran - Perfect", "artist": "serotonin", "views": "6.7M views", "viewsNum": 6688244, "dim": "8D"}, {"id": "FHJ7k-SuFB8", "title": "52 Gaj ka Daman || latest haryanvi song |GAANA", "artist": "9D GAANA", "views": "6.6M views", "viewsNum": 6589815, "dim": "9D"}, {"id": "HLqnlte7zg8", "title": "KALYANI ARJN | KDS | FIFTY4 | RONN", "artist": "8DRhythm Official", "views": "6.5M views", "viewsNum": 6540624, "dim": "8D"}, {"id": "hc7aZa92NdU", "title": "Ed Sheeran I Shape of you | Not&", "artist": "32D Audio Spot", "views": "6.1M views", "viewsNum": 6087209, "dim": "8D"}, {"id": "_s512A0l3no", "title": "DJ Snake ft. Justin Bieber - Let Me Love You", "artist": "8D TUNES", "views": "5.5M views", "viewsNum": 5547816, "dim": "8D"}, {"id": "VpbM_dPmyBE", "title": "Music Mix Best EDM Songs", "artist": "8D TUNES", "views": "5.2M views", "viewsNum": 5186608, "dim": "8D"}, {"id": "IChqIqFwUdM", "title": "The Weeknd - Starboy ft. Daft Punk | Tiktok Song", "artist": "8D MUSIX - LYF", "views": "4.9M views", "viewsNum": 4931112, "dim": "8D"}, {"id": "NHv19j2Xbgo", "title": "Charlie Puth feat. Selena Gomez - We Don't Talk Anymore", "artist": "Revo-luution", "views": "4.9M views", "viewsNum": 4914082, "dim": "8D"}, {"id": "5gHJlIdqqOE", "title": "The Neighbourhood - Sweater Weather", "artist": "Shake Music", "views": "4.9M views", "viewsNum": 4906437, "dim": "9D"}, {"id": "ORx82Nayn90", "title": "Nashe Si Chadh GayiSong - Befikre", "artist": "8D Bollywood Gaana ", "views": "4.8M views", "viewsNum": 4792846, "dim": "8D"}, {"id": "QtTM9X26bTk", "title": "Jhoome Jo Pathaan Song | Shah Rukh Khan, Deepika | Arijit Singh", "artist": "DOLBY INDIA ", "views": "4.8M views", "viewsNum": 4788819, "dim": "8D"}, {"id": "QfrJAHbG4_E", "title": "Ed Sheeran - Shape of you", "artist": "Illusi Nation", "views": "4.8M views", "viewsNum": 4783239, "dim": "8D"}, {"id": "u8eL1TjdHkE", "title": "Woh Ladki Jo Sabse Alag Hai || Baadshah || Shah Rukh Khan, Twinkle Khanna", "artist": "8D JS Creation", "views": "4.5M views", "viewsNum": 4541192, "dim": "8D"}, {"id": "nHhuYcsQGIM", "title": "BTS Jungkook - Euphoria", "artist": "RemaXZ", "views": "4.2M views", "viewsNum": 4182260, "dim": "10D"}, {"id": "rApChLhe3fo", "title": "Jennifer Lopez - On The Floor ft. Pitbull", "artist": "8DxNation", "views": "4.2M views", "viewsNum": 4177608, "dim": "8D"}, {"id": "6YQz8__aQjk", "title": "Indila - Love Story", "artist": "8D MUSIX - LYF", "views": "4.0M views", "viewsNum": 3991165, "dim": "8D"}, {"id": "ruGUHgzK13c", "title": "Music Mix BestSongs | HIT SONGS MIX", "artist": "8D Sakura", "views": "3.7M views", "viewsNum": 3666110, "dim": "8D"}, {"id": "QSIvpjuHcbE", "title": "The Weeknd - Starboy", "artist": "10D AUDIO", "views": "3.1M views", "viewsNum": 3145101, "dim": "8D"}, {"id": "A1gyoep9Nwo", "title": "INTERSTELLAR |Deep Melancholic Ambient Version", "artist": "Soothing Sonata", "views": "2.9M views", "viewsNum": 2929095, "dim": "8D"}, {"id": "XfQOOWuIkts", "title": "Doja Cat - Woman", "artist": "8D TUNES", "views": "2.8M views", "viewsNum": 2778281, "dim": "8D"}, {"id": "mU7tGyH0mVI", "title": "Adele - Skyfall *Seizure Warning*", "artist": "Inverted8D", "views": "2.7M views", "viewsNum": 2716611, "dim": "8D"}, {"id": "asxco3ttdxc", "title": "Kalyani | ARJN, KDS, FIFTY4 & Shreya Ghoshal", "artist": "8DxNation", "views": "2.6M views", "viewsNum": 2646817, "dim": "8D"}, {"id": "0y8nOkiVd1s", "title": "Mix 2021 EDMes of Popular Songs ♫Music", "artist": "8D TUNES", "views": "2.6M views", "viewsNum": 2642272, "dim": "8D"}, {"id": "pbWFaDutdxA", "title": "Music Mix || Best| Shake Music Vol 2", "artist": "Shake Music", "views": "2.6M views", "viewsNum": 2612769, "dim": "9D"}, {"id": "AyJAd0atFzk", "title": "G-Eazy & Halsey - Him & I", "artist": "8D TUNES", "views": "2.6M views", "viewsNum": 2608569, "dim": "8D"}, {"id": "N8V-UUriLQM", "title": "8H Bilateral EMDR | Theta Dreamscape 6.4hz | Reality Shifting", "artist": "Sound Energy Alchemist", "views": "2.5M views", "viewsNum": 2534597, "dim": "8D"}, {"id": "lRRF2liwNzc", "title": "Relax Music withBeats Lucid Dreaming, REM Sleep Hypnosis Music", "artist": "SleepTube - Hypnotic Relaxation", "views": "2.3M views", "viewsNum": 2255122, "dim": "8D"}, {"id": "JbH75OXVClU", "title": "NO COPYRIGHT TECHNOMUSIC DJ MIX 2023SOUND", "artist": "8D Sense", "views": "2.1M views", "viewsNum": 2123530, "dim": "8D"}, {"id": "OgHD8lb10f0", "title": "Jubin NautiyalSongs 2020 | Romantic| Best Of Jubin Nautiyal & s we use⬇️", "artist": "8D Tunes & Music", "views": "2.0M views", "viewsNum": 1991703, "dim": "8D"}, {"id": "-M8RdyJqUsw", "title": "Subha Hone Na De || Desi Boyz || Akshay Kumar, John Abraham, Deepika Padukone", "artist": "8D JS Creation", "views": "1.9M views", "viewsNum": 1929202, "dim": "8D"}, {"id": "3HZcMc_dZNM", "title": "Odhani Odh Ke Nachual Video Song | Tere Naam | Salman Khan, Bhoomika Chawla | RP", "artist": "RP CHAUHAN 3D SONGS - 90S", "views": "1.8M views", "viewsNum": 1751836, "dim": "8D"}, {"id": "EEEveLzE66A", "title": "Post Malone, Swae Lee - Sunflower", "artist": "Lordly Records", "views": "1.7M views", "viewsNum": 1688393, "dim": "9D"}, {"id": "k39oVsZqyDQ", "title": "Flow State MusicTheta Waves - Improve Concentration", "artist": "SleepTube - Hypnotic Relaxation", "views": "1.7M views", "viewsNum": 1685443, "dim": "8D"}, {"id": "YeC-WasxIm0", "title": "Saiyaara Title Song | Saiyaara | Hindi Sad Song 2025", "artist": "8DRhythm Official", "views": "1.7M views", "viewsNum": 1666889, "dim": "8D"}, {"id": "UselotfJgho", "title": "Tera Mera Rishta Continues | Awarapan 2", "artist": "8DRhythm Official", "views": "1.6M views", "viewsNum": 1612558, "dim": "8D"}, {"id": "git91vUK7o8", "title": "Lutt Le GayaExperience | Dhurandhar Movie Song | Ranveer Singh | Akshaye Khanna | Rehman", "artist": "Mathew", "views": "1.5M views", "viewsNum": 1535690, "dim": "8D"}, {"id": "I1B5HMammXU", "title": "Hookah Bar || Khiladi 786 || Himesh Reshammiya || Akshay Kumar, Asin", "artist": "8D JS Creation", "views": "1.5M views", "viewsNum": 1516017, "dim": "8D"}, {"id": "RgIQjOjQZ68", "title": "Songs 2021 Party Mix ♫es of Popular Songs", "artist": "8D TUNES", "views": "1.5M views", "viewsNum": 1483840, "dim": "8D"}, {"id": "Sz14s0iK-Q8", "title": "Eminem - Not Afraid", "artist": "10D AUDIO", "views": "1.3M views", "viewsNum": 1316704, "dim": "10D"}, {"id": "cHYrKSaTU18", "title": "Gehra Hua :| Dhurandhar | Ranveer Singh, Sara, Shashwat Sacev, Arijit Singh", "artist": "Dimension BeatX", "views": "1.2M views", "viewsNum": 1172660, "dim": "8D"}, {"id": "c_Iz2qTs2HU", "title": "Akhiyaan Gulaab : Shahid Kapoor, Kriti Sanon | Mitraz | Teri Baaton Mein Aisa Uljha Jiya", "artist": "8D Active Music", "views": "910K views", "viewsNum": 910734, "dim": "8D"}, {"id": "Q2tq4ytzJj0", "title": "Aasa Kooda song| Aasa Kooda song| Aasa Kooda songsong |- Maestro", "artist": "8D-Maestro", "views": "771K views", "viewsNum": 771421, "dim": "8D"}, {"id": "kzsjijaHUFQ", "title": "São Paulo - The Weeknd ***Epilepsy Warning***", "artist": "Inverted8D", "views": "755K views", "viewsNum": 755984, "dim": "8D"}, {"id": "GeJc26o2as0", "title": "Deep Sleep Solfeggio Frequencies || Black Screen |Beats", "artist": "Phi Tribe", "views": "741K views", "viewsNum": 741168, "dim": "8D"}, {"id": "x_zSIsNMA-I", "title": "The Chainsmokers ft. Halsey - Closer", "artist": "Revo-luution", "views": "721K views", "viewsNum": 721270, "dim": "9D"}, {"id": "FiKCOCzaQDE", "title": "Shawn Mendes, Camila Cabello - Señorita", "artist": "8D TUNES", "views": "644K views", "viewsNum": 644561, "dim": "8D"}, {"id": "uRiyW_VvPwk", "title": "Otilia - Bilionera", "artist": "8DxNation", "views": "631K views", "viewsNum": 631360, "dim": "8D"}, {"id": "vcr1dWyIlHY", "title": "Afusic - Pal Pal |MUSIC", "artist": "8D Ash Music", "views": "624K views", "viewsNum": 624900, "dim": "8D"}, {"id": "F9W-_S_PlYI", "title": "Sabrina Carpenter • Espresso", "artist": "8D NIGHTS", "views": "568K views", "viewsNum": 568967, "dim": "8D"}, {"id": "6Iq0pG8sQFU", "title": "Justin Bieber ft Nicki Minaj - Beauty And A Beat", "artist": "8D Strains", "views": "521K views", "viewsNum": 521262, "dim": "8D"}, {"id": "cfrRFRXWXHs", "title": "BestSongs 👻es of Popular Songs || Party Mix", "artist": "8D TUNES", "views": "431K views", "viewsNum": 431501, "dim": "8D"}, {"id": "r-GIdOIoCPU", "title": "Sahiba - Aditya Rikhari", "artist": "8D NIGHTS", "views": "248K views", "viewsNum": 248927, "dim": "8D"}, {"id": "n0SpKMnkPec", "title": "ADRelief, Deep Focus Music for Concentration & Creativity.Beats.", "artist": "Timeless Mind Meditation", "views": "231K views", "viewsNum": 231561, "dim": "8D"}, {"id": "qzDMFDPU29g", "title": "Toh Phir Aao | Awarapan Movie Song | Emraan Hashmi", "artist": "8DRhythm Official", "views": "128K views", "viewsNum": 128890, "dim": "8D"}, {"id": "W4jHh8DAF3M", "title": "963 Hz God Frequency in| Divine Healing & Pineal Gland Activation", "artist": "The God Frequency", "views": "88K views", "viewsNum": 88795, "dim": "8D"}, {"id": "nnLu8zTR1oc", "title": "Gajban | Chundadi Jaipur Ki | Sapna Choudhary | New Haryanvi Song Video 2020 |GAANA", "artist": "9D GAANA", "views": "51K views", "viewsNum": 51381, "dim": "9D"}];
+    let activeIndex = -1;
+    let isPlaying = false;
+    let ytPlayer = null;
+    let pageCount = 1;
+    let isFetching = false;
+    let progressInterval = null;
+    let isUserSeeking = false;
+    let isShuffle = false;
+    let repeatMode = 0; // 0 = off, 1 = repeat all, 2 = repeat one
+    const favorites = new Set();
+    let userExplicitPause = false;
+
+    // Prevent YouTube iframe from pausing when WebView is backgrounded
+    try {
+      Object.defineProperty(document, 'hidden', { get: () => false });
+      Object.defineProperty(document, 'visibilityState', { get: () => 'visible' });
+      Object.defineProperty(document, 'webkitVisibilityState', { get: () => 'visible' });
+      ['visibilitychange', 'webkitvisibilitychange', 'blur'].forEach(evt => {
+        window.addEventListener(evt, e => e.stopImmediatePropagation(), true);
+        document.addEventListener(evt, e => e.stopImmediatePropagation(), true);
+      });
+    } catch (e) {}
+
+    // PAUSE AUDIO METHOD FOR BLUETOOTH / HEADPHONE DISCONNECT
+    window.pauseAudio = function() {
+      userExplicitPause = true;
+      if (ytPlayer && isPlaying) {
+        ytPlayer.pauseVideo();
+      }
+      setPlaying(false);
+    };
+
+    // SVG ICONS TEMPLATES (Exact, Clean Solid Geometrics)
+    const SVG_PLAY = '<path d="M8 5.14v13.72a1 1 0 0 0 1.55.84l11-6.86a1 1 0 0 0 0-1.68l-11-6.86A1 1 0 0 0 8 5.14z"/>';
+    const SVG_PAUSE = '<rect x="6" y="5" width="4" height="14" rx="1.5"/><rect x="14" y="5" width="4" height="14" rx="1.5"/>';
+    
+    const SVG_REPEAT_ALL = `
+      <polyline points="17 1 21 5 17 9"/>
+      <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <polyline points="7 23 3 19 7 15"/>
+      <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+    `;
+    const SVG_REPEAT_ONE = `
+      <polyline points="17 1 21 5 17 9"/>
+      <path d="M3 11V9a4 4 0 0 1 4-4h14"/>
+      <polyline points="7 23 3 19 7 15"/>
+      <path d="M21 13v2a4 4 0 0 1-4 4H3"/>
+      <text x="12" y="14.5" font-size="7" font-weight="900" text-anchor="middle" fill="currentColor" stroke="none">1</text>
+    `;
+
+    // FULL SCREEN PLAYER MODAL CONTROLS
+    function openFullPlayer() {
+      document.getElementById('fullPlayer').classList.add('open');
+    }
+
+    function closeFullPlayer() {
+      const queue = document.getElementById('queueSheet');
+      if (queue && queue.classList.contains('open')) {
+        closeQueueSheet();
+        return;
+      }
+      document.getElementById('fullPlayer').classList.remove('open');
+    }
+
+    window.isFullPlayerOpen = function() {
+      const queue = document.getElementById('queueSheet');
+      const isQueue = queue && queue.classList.contains('open');
+      const isFull = document.getElementById('fullPlayer').classList.contains('open');
+      return isFull || isQueue;
+    };
+
+    window.closeFullPlayer = closeFullPlayer;
+
+    // QUEUE SHEET CONTROLS
+    function openQueueSheet() {
+      renderQueueList();
+      document.getElementById('queueSheet').classList.add('open');
+    }
+
+    function closeQueueSheet() {
+      document.getElementById('queueSheet').classList.remove('open');
+    }
+
+    function renderQueueList() {
+      const container = document.getElementById('queueList');
+      container.innerHTML = '';
+      allSongs.forEach((song, idx) => {
+        const item = document.createElement('div');
+        item.className = 'queue-item' + (idx === activeIndex ? ' active' : '');
+        item.innerHTML = `
+          <img class="queue-item-thumb" src="${getThumbUrl(song.id)}" alt="">
+          <div class="queue-item-info">
+            <div class="queue-item-title">${song.title}</div>
+            <div class="queue-item-artist">${song.artist}</div>
+          </div>
+        `;
+        item.onclick = () => {
+          playIndex(idx);
+          closeQueueSheet();
+        };
+        container.appendChild(item);
+      });
+    }
+
+    // DOUBLE TAP ALBUM ART TO JUMP 10 SECONDS
+    let lastTapTime = 0;
+    const artBox = document.getElementById('artBoxContainer');
+
+    artBox.addEventListener('click', (e) => {
+      const now = Date.now();
+      const rect = artBox.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const isLeft = x < rect.width / 2;
+
+      if (now - lastTapTime < 340) {
+        if (isLeft) {
+          rewind10();
+          showRipple('rippleLeft');
+        } else {
+          forward10();
+          showRipple('rippleRight');
+        }
+        lastTapTime = 0;
+      } else {
+        lastTapTime = now;
+      }
+    });
+
+    function showRipple(id) {
+      const el = document.getElementById(id);
+      el.style.opacity = '1';
+      setTimeout(() => {
+        el.style.opacity = '0';
+      }, 500);
+    }
+
+    // FAVORITES TOGGLE
+    function toggleFavorite() {
+      if (activeIndex < 0) return;
+      const song = allSongs[activeIndex];
+      const btn = document.getElementById('fullFavBtn');
+      const icon = document.getElementById('favSvgIcon');
+      if (favorites.has(song.id)) {
+        favorites.delete(song.id);
+        btn.classList.remove('active');
+        icon.classList.add('svg-stroke');
+        icon.innerHTML = '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
+      } else {
+        favorites.add(song.id);
+        btn.classList.add('active');
+        icon.classList.remove('svg-stroke');
+        icon.innerHTML = '<path fill="#00f2fe" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>';
+      }
+    }
+
+    // YOUTUBE PLAYER ENGINE INIT
+    function onYouTubeIframeAPIReady() {
+      ytPlayer = new YT.Player('yt-engine-player', {
+        height: '100%',
+        width: '100%',
+        videoId: allSongs[0] ? allSongs[0].id : '',
+        playerVars: {
+          'playsinline': 1,
+          'controls': 0,
+          'disablekb': 1,
+          'rel': 0,
+          'modestbranding': 1,
+          'suggestedQuality': 'highres',
+          'origin': window.location.origin
+        },
+        events: {
+          'onStateChange': onPlayerStateChange
+        }
+      });
+    }
+
+    function onPlayerStateChange(event) {
+      if (event.data === YT.PlayerState.PLAYING) {
+        userExplicitPause = false;
+        try {
+          if (ytPlayer.setPlaybackQuality) ytPlayer.setPlaybackQuality('highres');
+        } catch (e) {}
+        setPlaying(true);
+      } else if (event.data === YT.PlayerState.PAUSED) {
+        if (!userExplicitPause) {
+          // Background suspension by Chromium detected! Auto-resume immediately!
+          setTimeout(() => {
+            if (!userExplicitPause && ytPlayer && ytPlayer.playVideo) {
+              ytPlayer.playVideo();
+            }
+          }, 50);
+        } else {
+          setPlaying(false);
+        }
+      } else if (event.data === YT.PlayerState.ENDED) {
+        if (repeatMode === 2) {
+          ytPlayer.seekTo(0, true);
+          ytPlayer.playVideo();
+        } else {
+          playNext();
+        }
+      }
+    }
+
+    function setPlaying(playing) {
+      isPlaying = playing;
+      updateActiveRow();
+
+      // Update Play/Pause SVGs
+      const svgPath = playing ? SVG_PAUSE : SVG_PLAY;
+      document.getElementById('miniPlayIcon').innerHTML = svgPath;
+      document.getElementById('fullPlayIcon').innerHTML = svgPath;
+
+      if (window.AndroidMedia && window.AndroidMedia.onStateChanged) {
+        window.AndroidMedia.onStateChanged(playing);
+      }
+
+      if (playing) {
+        startProgressTracker();
+      } else {
+        stopProgressTracker();
+      }
+    }
+
+    // FILLED PROGRESS BAR EFFECT
+    function updateSliderFill(pct) {
+      const slider = document.getElementById('fullSlider');
+      slider.style.background = `linear-gradient(to right, #00f2fe 0%, #00f2fe ${pct}%, #1e2334 ${pct}%, #1e2334 100%)`;
+    }
+
+    // PROGRESS TRACKER
+    function startProgressTracker() {
+      stopProgressTracker();
+      progressInterval = setInterval(() => {
+        if (!ytPlayer || !ytPlayer.getCurrentTime || !ytPlayer.getDuration) return;
+        try {
+          const cur = ytPlayer.getCurrentTime() || 0;
+          const dur = ytPlayer.getDuration() || 0;
+          if (dur > 0 && !isUserSeeking) {
+            const pct = (cur / dur) * 100;
+            document.getElementById('miniProgressFill').style.width = pct + '%';
+            document.getElementById('fullSlider').value = pct;
+            updateSliderFill(pct);
+            document.getElementById('fullCurTime').textContent = formatSeconds(cur);
+            document.getElementById('fullDurTime').textContent = formatSeconds(dur);
+          }
+        } catch (e) {}
+      }, 500);
+    }
+
+    function stopProgressTracker() {
+      if (progressInterval) {
+        clearInterval(progressInterval);
+        progressInterval = null;
+      }
+    }
+
+    function formatSeconds(sec) {
+      const s = Math.floor(sec || 0);
+      const m = Math.floor(s / 60);
+      const rem = s % 60;
+      return (m < 10 ? '0' : '') + m + ':' + (rem < 10 ? '0' : '') + rem;
+    }
+
+    // SCRUBBER DRAGGING
+    function onSliderInput(val) {
+      isUserSeeking = true;
+      updateSliderFill(val);
+      if (ytPlayer && ytPlayer.getDuration) {
+        const dur = ytPlayer.getDuration() || 0;
+        const cur = (val / 100) * dur;
+        document.getElementById('fullCurTime').textContent = formatSeconds(cur);
+        document.getElementById('miniProgressFill').style.width = val + '%';
+      }
+    }
+
+    function onSliderChange(val) {
+      if (ytPlayer && ytPlayer.getDuration) {
+        const dur = ytPlayer.getDuration() || 0;
+        const seekSec = (val / 100) * dur;
+        ytPlayer.seekTo(seekSec, true);
+      }
+      setTimeout(() => { isUserSeeking = false; }, 300);
+    }
+
+    // SKIP 10 SECONDS
+    function rewind10() {
+      if (ytPlayer && ytPlayer.getCurrentTime) {
+        const cur = ytPlayer.getCurrentTime() || 0;
+        const target = Math.max(0, cur - 10);
+        ytPlayer.seekTo(target, true);
+      }
+    }
+
+    function forward10() {
+      if (ytPlayer && ytPlayer.getCurrentTime) {
+        const cur = ytPlayer.getCurrentTime() || 0;
+        const dur = ytPlayer.getDuration() || (cur + 10);
+        const target = Math.min(dur, cur + 10);
+        ytPlayer.seekTo(target, true);
+      }
+    }
+
+    function togglePlay() {
+      if (!ytPlayer) return;
+      if (isPlaying) {
+        userExplicitPause = true;
+        ytPlayer.pauseVideo();
+      } else {
+        userExplicitPause = false;
+        ytPlayer.playVideo();
+      }
+    }
+
+    function playIndex(idx) {
+      activeIndex = idx;
+      userExplicitPause = false;
+      const song = allSongs[activeIndex];
+      if (!song) return;
+
+      updatePlayersUI(song);
+      updateActiveRow();
+
+      if (ytPlayer && ytPlayer.loadVideoById) {
+        try {
+          ytPlayer.loadVideoById({
+            videoId: song.id,
+            suggestedQuality: 'highres'
+          });
+        } catch (e) {
+          try { ytPlayer.loadVideoById(song.id); } catch (e2) {}
+        }
+      }
+    }
+
+    function playNext() {
+      if (allSongs.length === 0) return;
+      let next;
+      if (isShuffle) {
+        next = Math.floor(Math.random() * allSongs.length);
+      } else {
+        next = (activeIndex + 1) % allSongs.length;
+      }
+      playIndex(next);
+    }
+
+    function playPrev() {
+      if (allSongs.length === 0) return;
+      const prev = (activeIndex - 1 + allSongs.length) % allSongs.length;
+      playIndex(prev);
+    }
+
+    function toggleShuffle() {
+      isShuffle = !isShuffle;
+      const btn = document.getElementById('btnShuffle');
+      if (isShuffle) {
+        btn.classList.add('active');
+      } else {
+        btn.classList.remove('active');
+      }
+    }
+
+    function toggleRepeat() {
+      repeatMode = (repeatMode + 1) % 3;
+      const btn = document.getElementById('btnRepeat');
+      const icon = document.getElementById('repeatIconSvg');
+      if (repeatMode === 0) {
+        btn.classList.remove('active');
+        icon.innerHTML = SVG_REPEAT_ALL;
+      } else if (repeatMode === 1) {
+        btn.classList.add('active');
+        icon.innerHTML = SVG_REPEAT_ALL;
+      } else {
+        btn.classList.add('active');
+        icon.innerHTML = SVG_REPEAT_ONE;
+      }
+    }
+
+    function getThumbUrl(id) {
+      return 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+    }
+
+    function updatePlayersUI(song) {
+      const thumb = getThumbUrl(song.id);
+
+      // Mini Player
+      document.getElementById('miniPlayer').classList.add('show');
+      document.getElementById('miniThumb').src = thumb;
+      document.getElementById('miniTitle').textContent = song.title;
+      document.getElementById('miniArtist').textContent = (song.dim || '8D') + ' • ' + song.artist;
+      document.getElementById('miniProgressFill').style.width = '0%';
+
+      // Full Player
+      document.getElementById('fullThumb').src = thumb;
+      document.getElementById('fullGlow').style.backgroundImage = 'url(' + thumb + ')';
+      document.getElementById('fullTitle').textContent = song.title;
+      document.getElementById('fullArtist').textContent = song.artist;
+      document.getElementById('fullViews').textContent = song.views || '8D Audio';
+      document.getElementById('fullHeaderDim').textContent = 'PLAYING ' + (song.dim || '8D') + ' AUDIO';
+      document.getElementById('fullCurTime').textContent = '00:00';
+      document.getElementById('fullDurTime').textContent = '00:00';
+      document.getElementById('fullSlider').value = 0;
+      updateSliderFill(0);
+
+      // Notify Android Native Service for background playback & metadata
+      if (window.AndroidMedia && window.AndroidMedia.onTrackChanged) {
+        window.AndroidMedia.onTrackChanged(song.title, song.artist, thumb);
+      }
+
+      // Update Favorite icon
+      const isFav = favorites.has(song.id);
+      const btn = document.getElementById('fullFavBtn');
+      const icon = document.getElementById('favSvgIcon');
+      if (isFav) {
+        btn.classList.add('active');
+        icon.classList.remove('svg-stroke');
+        icon.innerHTML = '<path fill="#00f2fe" d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>';
+      } else {
+        btn.classList.remove('active');
+        icon.classList.add('svg-stroke');
+        icon.innerHTML = '<path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>';
+      }
+    }
+
+    // RENDER SONG LIST (SPOTIFY / YOUTUBE MUSIC STYLE ROWS)
+    function renderSongList() {
+      const container = document.getElementById('songList');
+      container.innerHTML = '';
+
+      allSongs.forEach((song, idx) => {
+        const row = document.createElement('div');
+        row.className = 'song-row';
+        row.dataset.index = idx;
+        if (idx === activeIndex) {
+          row.classList.add('active');
+        }
+
+        const hqThumb = getThumbUrl(song.id);
+        const mqThumb = 'https://img.youtube.com/vi/' + song.id + '/mqdefault.jpg';
+        const rankClass = idx === 0 ? 'top-1' : idx === 1 ? 'top-2' : idx === 2 ? 'top-3' : '';
+
+        row.innerHTML = `
+          <div class="row-rank ${rankClass}">${idx + 1}</div>
+          <div class="row-thumb-box">
+            <img class="row-thumb" src="${hqThumb}" alt="" loading="lazy"
+                 onerror="this.onerror=null; this.src='${mqThumb}';">
+            <span class="row-dim-badge">${song.dim || '8D'}</span>
+          </div>
+          <div class="row-info">
+            <div class="row-title">${song.title}</div>
+            <div class="row-meta">
+              <span class="row-artist">${song.artist}</span>
+              <span class="row-dot">•</span>
+              <span class="row-views">${song.views || '8D Audio'}</span>
+            </div>
+          </div>
+        `;
+
+        row.addEventListener('click', () => {
+          playIndex(idx);
+        });
+
+        container.appendChild(row);
+      });
+    }
+
+    function updateActiveRow() {
+      document.querySelectorAll('.song-row').forEach((row) => {
+        const idx = parseInt(row.dataset.index, 10);
+        if (idx === activeIndex) {
+          row.classList.add('active');
+        } else {
+          row.classList.remove('active');
+        }
+      });
+    }
+
+    // SILENT PULL TO REFRESH
+    let touchStartY = 0;
+    let touchDiffY = 0;
+    let isPulling = false;
+    const pullBox = document.getElementById('pullBox');
+
+    window.addEventListener('touchstart', (e) => {
+      if (window.scrollY === 0 && !window.isFullPlayerOpen()) {
+        touchStartY = e.touches[0].clientY;
+        isPulling = true;
+      } else {
+        isPulling = false;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (!isPulling) return;
+      const currentY = e.touches[0].clientY;
+      touchDiffY = currentY - touchStartY;
+      if (touchDiffY > 0 && window.scrollY === 0) {
+        const translateY = Math.min(touchDiffY * 0.45, 55);
+        pullBox.style.transform = `translateY(${translateY}px)`;
+      }
+    }, { passive: true });
+
+    window.addEventListener('touchend', () => {
+      if (isPulling && touchDiffY > 75 && window.scrollY === 0) {
+        triggerPullRefresh();
+      } else {
+        pullBox.style.transform = 'translateY(0px)';
+      }
+      isPulling = false;
+      touchDiffY = 0;
+    });
+
+    function triggerPullRefresh() {
+      pullBox.classList.add('loading');
+      pullBox.style.transform = 'translateY(55px)';
+      pageCount++;
+
+      if (window.AndroidMedia && window.AndroidMedia.search8DOnline) {
+        window.AndroidMedia.search8DOnline('', pageCount, true);
+      } else {
+        setTimeout(() => {
+          allSongs.sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
+          renderSongList();
+          endPullRefresh();
+        }, 800);
+      }
+    }
+
+    function endPullRefresh() {
+      pullBox.classList.remove('loading');
+      pullBox.style.transform = 'translateY(0px)';
+    }
+
+    // INFINITE SCROLL OBSERVER
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting && !isFetching) {
+          isFetching = true;
+          pageCount++;
+          if (window.AndroidMedia && window.AndroidMedia.search8DOnline) {
+            window.AndroidMedia.search8DOnline('', pageCount, false);
+          }
+          setTimeout(() => { isFetching = false; }, 2000);
+        }
+      });
+    }, { rootMargin: '300px' });
+
+    observer.observe(document.getElementById('sentinel'));
+
+    function cleanTitle(raw) {
+      let t = raw.replace(/\(.*?\)|\[.*?\]/g, ' ').replace(/[⚡🎧🔇💽🎶]/g, '');
+      t = t.replace(/\b(use headphones|headphones?|wear headphones|binaural|audio|dolby|official|lyrics?)\b/gi, '');
+      return t.replace(/\s+/g, ' ').trim(' -|:') || raw;
+    }
+
+    function parseViewsNum(text) {
+      if (!text) return 0;
+      let m = text.match(/([\d\.]+)\s*([BMKbmk])/);
+      if (m) {
+        let val = parseFloat(m[1]);
+        let unit = m[2].toUpperCase();
+        if (unit === 'B') return Math.floor(val * 1e9);
+        if (unit === 'M') return Math.floor(val * 1e6);
+        if (unit === 'K') return Math.floor(val * 1e3);
+      }
+      let digits = text.replace(/[^\d]/g, '');
+      return digits ? parseInt(digits, 10) : 0;
+    }
+
+    function formatYtViews(num, rawText) {
+      if (num >= 1000000000) return (num / 1e9).toFixed(1) + 'B views';
+      if (num >= 1000000) {
+        let val = num / 1e6;
+        return (val >= 10 ? Math.floor(val) : val.toFixed(1)) + 'M views';
+      }
+      if (num >= 1000) return Math.floor(num / 1e3) + 'K views';
+      if (num > 0) return num + ' views';
+      if (rawText && !rawText.toLowerCase().includes('views')) return rawText + ' views';
+      return rawText || '8D Audio';
+    }
+
+    // PARSE YOUTUBE SEARCH DATA & SORT DESCENDING BY VIEWS
+    window.onRawYtDataReceived = function(ytData, isRefresh) {
+      try {
+        endPullRefresh();
+
+        const contents = ytData?.contents?.twoColumnSearchResultsRenderer?.primaryContents?.sectionListRenderer?.contents || [];
+        const newSongs = [];
+
+        contents.forEach(sec => {
+          const items = sec.itemSectionRenderer?.contents || [];
+          items.forEach(item => {
+            const v = item.videoRenderer;
+            if (!v || !v.videoId) return;
+
+            const title = v.title?.runs?.[0]?.text || '';
+            const tagMatch = title.match(/\b([89]|10)\s*D\b/i);
+            if (!tagMatch) return;
+
+            const dim = tagMatch[1].toUpperCase() + 'D';
+            const viewsText = v.viewCountText?.simpleText || v.shortViewCountText?.simpleText || '';
+            const viewsNum = parseViewsNum(viewsText);
+            const channel = v.ownerText?.runs?.[0]?.text || '8D Audio';
+
+            newSongs.push({
+              id: v.videoId,
+              title: cleanTitle(title),
+              artist: channel,
+              views: formatYtViews(viewsNum, viewsText),
+              viewsNum: viewsNum,
+              dim: dim
+            });
+          });
+        });
+
+        if (newSongs.length > 0) {
+          if (isRefresh) {
+            allSongs.length = 0;
+            newSongs.forEach(s => allSongs.push(s));
+            activeIndex = -1;
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+          } else {
+            newSongs.forEach(s => {
+              if (!allSongs.some(e => e.id === s.id)) {
+                allSongs.push(s);
+              }
+            });
+          }
+          allSongs.sort((a, b) => (b.viewsNum || 0) - (a.viewsNum || 0));
+          renderSongList();
+        }
+      } catch (err) {
+        endPullRefresh();
+      }
+    };
+
+    window.onSearchFailed = function() {
+      endPullRefresh();
+    };
+
+    // Initial render
+    renderSongList();
+  </script>
+</body>
+</html>

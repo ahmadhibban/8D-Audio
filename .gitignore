@@ -1,0 +1,10 @@
+# Ignore notes and build artifacts
+[Aa].[Tt][Xx][Tt]
+A.txt
+a.txt
+android_project/bin/
+android_project/gen/
+*.class
+*.dex
+.DS_Store
+Thumbs.db
