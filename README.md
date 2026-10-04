@@ -36,6 +36,16 @@ bash scripts/build_apk.sh
 ```
 The output APK will be placed in the `apk/` directory.
 
+## 🌐 Web & Live App
+
+- Live Web: [https://ahmadhibban.github.io/8D-Audio/](https://ahmadhibban.github.io/8D-Audio/)
+- Standalone Android APK with background playback service.
+
+## 👤 Author
+
+**Ahmad Hibban**
+- GitHub: [@ahmadhibban](https://github.com/ahmadhibban)
+
 ## 📄 License
 
-Open-source under the MIT License.
+Open-source under the MIT License. Copyright © Ahmad Hibban.

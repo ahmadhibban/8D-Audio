@@ -1,5 +1,6 @@
 #!/bin/bash
-# 100M+ Hits Music APK One-Click Build Script
+# 8D Audio Player - One-Click Build Script (Termux / Linux)
+# Author: Ahmad Hibban
 set -e
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

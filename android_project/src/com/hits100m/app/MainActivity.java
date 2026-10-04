@@ -96,22 +96,57 @@ public class MainActivity extends Activity {
                     view.loadUrl(url);
                     return true;
                 }
+
+                @Override
+                public void onReceivedError(WebView view, int errorCode, String description, String failingUrl) {
+                    if (failingUrl != null && failingUrl.startsWith("http")) {
+                        loadLocalAssetFallback(view);
+                    }
+                }
+
+                @Override
+                public void onReceivedError(WebView view, android.webkit.WebResourceRequest request, android.webkit.WebResourceError error) {
+                    if (request != null && request.isForMainFrame() && request.getUrl() != null && request.getUrl().toString().startsWith("http")) {
+                        loadLocalAssetFallback(view);
+                    }
+                }
             });
 
             webView.setWebChromeClient(new WebChromeClient());
 
-            try {
-                InputStream is = getAssets().open("index.html");
-                byte[] buffer = new byte[is.available()];
-                is.read(buffer);
-                is.close();
-                String html = new String(buffer, "UTF-8");
-                webView.loadDataWithBaseURL("https://localhost/", html, "text/html", "UTF-8", null);
-            } catch (Throwable e) {
-                webView.loadUrl("file:///android_asset/index.html");
+            if (isNetworkAvailable()) {
+                webView.loadUrl(ONLINE_URL);
+            } else {
+                loadLocalAssetFallback(webView);
             }
         } catch (Throwable t) {
             t.printStackTrace();
+        }
+    }
+
+    private static final String ONLINE_URL = "https://ahmadhibban.github.io/8D-Audio/";
+
+    private boolean isNetworkAvailable() {
+        try {
+            android.net.ConnectivityManager cm = (android.net.ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            if (cm != null) {
+                android.net.NetworkInfo netInfo = cm.getActiveNetworkInfo();
+                return netInfo != null && netInfo.isConnected();
+            }
+        } catch (Throwable ignored) {}
+        return false;
+    }
+
+    private void loadLocalAssetFallback(WebView view) {
+        try {
+            InputStream is = getAssets().open("index.html");
+            byte[] buffer = new byte[is.available()];
+            is.read(buffer);
+            is.close();
+            String html = new String(buffer, "UTF-8");
+            view.loadDataWithBaseURL("https://localhost/", html, "text/html", "UTF-8", null);
+        } catch (Throwable e) {
+            view.loadUrl("file:///android_asset/index.html");
         }
     }
 

@@ -1,0 +1,17 @@
+{
+  "name": "8D Audio Player",
+  "short_name": "8D Audio",
+  "author": "Ahmad Hibban",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#090a10",
+  "theme_color": "#090a10",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "./icon.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    }
+  ]
+}
