@@ -1,5 +1,7 @@
 # 8D Audio - Spatial Audio Music Streaming Android App
 
+> 🌐 **Live Web Application**: [https://ahmadhibban.github.io/8D-Audio/](https://ahmadhibban.github.io/8D-Audio/) — *Stream spatial 8D audio directly in any browser without installation.*
+
 An Android music streaming application designed specifically for 8D, 9D, and 10D spatial audio tracks. Built with a Spotify and Apple Music inspired mobile interface, continuous background playback, and automatic pause on Bluetooth disconnection.
 
 ## ✨ Features
